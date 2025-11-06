@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     bash \
     cron \
-    procps \
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Bitwarden CLI
@@ -20,10 +20,8 @@ RUN set -eux; \
 RUN mkdir -p /app/backups && \
     mkdir -p /var/log/cron
 
-# Copy application files
 COPY ./src /app
 
-# Set permissions for cron log
 RUN touch /var/log/cron.log && \
     chmod 644 /var/log/cron.log
 
@@ -33,7 +31,4 @@ COPY ./entrypoint.sh /app/entrypoint.sh
 
 RUN chmod +x /app/entrypoint.sh
 
-ENV PATH="/usr/local/bin:${PATH}"
-
-# Start cron in the foreground
 ENTRYPOINT ["/app/entrypoint.sh"]

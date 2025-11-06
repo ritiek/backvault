@@ -3,10 +3,18 @@ import subprocess
 import json
 import logging
 from typing import Any
+from sys import stdout
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s: %(message)s",
+    handlers=[
+        logging.FileHandler("/var/log/cron.log"),
+        logging.StreamHandler(stdout)
+    ]
+)
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
 
 class BitwardenError(Exception):
     """Base exception for Bitwarden wrapper."""

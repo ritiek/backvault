@@ -7,12 +7,12 @@ cat > /app/run_wrapper.sh <<EOF
 #!/bin/bash
 export PATH="/usr/local/bin:\$PATH"
 $(printenv | grep -E 'BW_|BACKUP_' | sed 's/^/export /')
-/usr/local/bin/python /app/run.py >> /var/log/cron.log 2>&1
+/usr/local/bin/python /app/run.py 2>&1 | tee -a /var/log/cron.log > /proc/1/fd/1
 EOF
 
 chmod +x /app/run_wrapper.sh
 
 echo "$CRON_EXPRESSION /app/run_wrapper.sh" | crontab -
 
-echo "Cron setup complete, starting cron in foreground"
-exec cron -L 15 -f
+echo "Cron setup complete, starting cron on foreground"
+exec cron -f
