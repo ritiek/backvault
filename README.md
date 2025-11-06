@@ -27,7 +27,7 @@ docker run -d \
   -e BW_PASSWORD="your_master_password" \
   -e BW_SERVER="https://vault.yourdomain.com" \
   -e BW_FILE_PASSWORD="backup_encryption_password" \
-  -e CRON_EXPRESSION="0 */12 * * *" \
+  -e BACKUP_INTERVAL_HOURS=12 \
   -v /path/to/backup:/app/backups \
   ghcr.io/mvfc/backvault:latest
 ````
@@ -53,7 +53,7 @@ services:
       BW_PASSWORD: "your_master_password"
       BW_SERVER: "https://vault.yourdomain.com"
       BW_FILE_PASSWORD: "backup_encryption_password"
-      CRON_EXPRESSION: "0 */12 * * *"
+      BACKUP_INTERVAL_HOURS: 12
       NODE_TLS_REJECT_UNAUTHORIZED: 0
     volumes:
       - ./backups:/app/backups
