@@ -1,17 +1,10 @@
 [project]
-name = "wardensync"
+name = "backvault"
 version = "0.1.0"
-description = "One-way Vaultwarden -> Bitwarden sync/mirror tool"
+description = "Bitwarden/Vaultwarden backup tool"
 requires-python = ">=3.12"
 
 [dependency-groups]
 dev = [
     "ruff>=0.14.2",
 ]
-
-# [project.scripts]
-# wardensync = "wardensync.cli:cli"
-
-# [build-system]
-# requires = ["hatchling"]
-# build-backend = "hatchling.build"

@@ -51,6 +51,7 @@ class BitwardenClient:
                     capture_output=True,
                     check=True,
                     env=env,
+                    preexec_fn=None,  # Disable process group creation
                 )
             except:
                 try:
@@ -78,7 +79,12 @@ class BitwardenClient:
         full_cmd = [self.bw_cmd] + cmd
         logger.debug(f"Running command: {' '.join(full_cmd)}")
         result = subprocess.run(
-            full_cmd, text=True, capture_output=True, check=True, env=env
+            full_cmd,
+            text=True,
+            capture_output=True,
+            check=True,
+            env=env,
+            preexec_fn=None,  # Disable process group creation
         )
 
         if result.returncode != 0:
@@ -176,79 +182,3 @@ class BitwardenClient:
         self.session = result.stdout.strip()
         logger.info("Vault unlocked successfully")
         return self.session
-
-    def list_items(self) -> list[dict[str, Any]]:
-        """Return all vault items as list of dicts"""
-        return self._run(["list", "items"])
-
-    def get_item(self, item_id: str) -> dict[str, Any]:
-        """Return a single item by id"""
-        return self._run(["get", "item", item_id])
-
-    def create_item(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Create a new item from a dictionary payload"""
-        proc = subprocess.Popen(
-            [self.bw_cmd, "create", "item", "--raw"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env={
-                **os.environ,
-                **({"BW_SESSION": self.session} if self.session else {}),
-            },
-        )
-        out, err = proc.communicate(json.dumps(payload))
-        if proc.returncode != 0:
-            logger.error(f"Error creating item: {err.strip()}")
-            raise BitwardenError(err.strip())
-        return json.loads(out)
-
-    def edit_item(self, item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """Edit an existing item by ID"""
-        proc = subprocess.Popen(
-            [self.bw_cmd, "edit", "item", item_id, "--raw"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env={
-                **os.environ,
-                **({"BW_SESSION": self.session} if self.session else {}),
-            },
-        )
-        out, err = proc.communicate(json.dumps(payload))
-        if proc.returncode != 0:
-            logger.error(f"Error editing item {item_id}: {err.strip()}")
-            raise BitwardenError(err.strip())
-        return json.loads(out)
-
-    def delete_item(self, item_id: str) -> None:
-        """Delete an item by ID"""
-        self._run(["delete", "item", item_id], capture_json=False)
-        logger.info(f"Deleted item {item_id}")
-
-    @staticmethod
-    def get_custom_field(item: dict, field_name: str) -> str:
-        """Return the value of a custom field if it exists, else empty string."""
-        fields = item.get("fields") or []
-        for f in fields:
-            if f.get("name") == field_name:
-                return f.get("value") or ""
-        return ""
-
-    @staticmethod
-    def set_custom_field(item: dict, field_name: str, value: str) -> dict:
-        """Set or update a custom field in an item."""
-        fields = item.get("fields") or []
-        for f in fields:
-            if f.get("name") == field_name:
-                f["value"] = value
-                item["fields"] = fields
-                return item
-        # Field not found, add new
-        fields.append(
-            {"name": field_name, "value": value, "type": 0}
-        )  # type 0 = text field
-        item["fields"] = fields
-        return item

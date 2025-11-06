@@ -1,12 +1,12 @@
-FROM alpine:latest
+FROM python:3.12-slim-bookworm
 
 # Install required system packages
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     unzip \
     bash \
-    dcron \
-    && rm -rf /var/cache/apk/*
+    cron \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Bitwarden CLI
 RUN set -eux; \
@@ -15,20 +15,21 @@ RUN set -eux; \
     chmod +x /usr/local/bin/bw; \
     rm bw.zip
 
-# Create a script to run the backup and cleanup old backups
-RUN printf '%s\n' '#!/bin/bash' \
-    'set -eux' \
-    '/usr/local/bin/bw export --output /app/backups/backup_$(date +\%Y\%m\%d_\%H\%M\%S).json --format json --password ${PASSWORD}' \
-    'find /app/backups -name "backup_*.json" -type f -mtime +7 -delete' \
-    > /app/backup.sh && \
-    chmod +x /app/backup.sh
+# Create backup directory
+RUN mkdir -p /app/backups && \
+    mkdir -p /var/log/cron
 
 # Copy application files
-COPY . /app
+COPY ./src /app
+
+# Set permissions for cron log
+RUN touch /var/log/cron.log && \
+    chmod 644 /var/log/cron.log
+
 WORKDIR /app
 
 # Set up cron job
-RUN echo "0 */12 * * * /bin/bash /app/backup.sh >> /var/log/cron.log 2>&1" | crontab -
+RUN echo "0 */${BACKUP_INTERVAL_HOURS:-12} * * * /usr/bin/python3 /app/run.py >> /var/log/cron.log 2>&1" | crontab -
 
 # Start cron in the foreground
-CMD ["crond", "-f"]
+CMD ["cron", "-f"]
