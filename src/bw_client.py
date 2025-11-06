@@ -62,7 +62,7 @@ class BitwardenClient:
                     preexec_fn=None,  # Disable process group creation
                 )
             except CalledProcessError:
-                continue
+                pass
             except:
                 try:
                     self.logout()
