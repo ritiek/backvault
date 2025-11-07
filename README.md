@@ -10,7 +10,8 @@ It’s designed for hands-free, secure, and automated backups using the official
 - 🔒 Securely exports your vault using your Bitwarden credentials  
 - 🕐 Supports both **interval-based** and **cron-based** backup scheduling  
 - 💾 Password-protected backup files using AES encryption  
-- 🌐 Works with both Bitwarden Cloud and self-hosted Vaultwarden (supports self-signed certs)  
+- ✨ **Two Encryption Modes**: Choose between Bitwarden's native encrypted format or a portable, standard AES-256-GCM encrypted format.
+- 🌐 Works with both Bitwarden Cloud and self-hosted Bitwarden/Vaultwarden  
 - 🐳 Runs fully containerized — no setup or local dependencies required
 
 ---
@@ -27,13 +28,14 @@ docker run -d \
   -e BW_PASSWORD="your_master_password" \
   -e BW_SERVER="https://vault.yourdomain.com" \
   -e BW_FILE_PASSWORD="backup_encryption_password" \
+  -e BACKUP_ENCRYPTION_MODE="raw" \
   -e BACKUP_INTERVAL_HOURS=12 \
   -v /path/to/backup:/app/backups \
   ghcr.io/mvfc/backvault:latest
-````
+```
 
 > 🔑 **Important**: The container uses the official Bitwarden CLI internally.
-> Your credentials are only used to generate the export — they are **never stored** persistently.
+> Your credentials are only used to generate the export — they are **never stored** persistently and **never sent** anywhere else.
 
 ---
 
@@ -53,6 +55,7 @@ services:
       BW_PASSWORD: "your_master_password"
       BW_SERVER: "https://vault.yourdomain.com"
       BW_FILE_PASSWORD: "backup_encryption_password"
+      BACKUP_ENCRYPTION_MODE: "raw" # Use 'bitwarden' for the default format
       BACKUP_INTERVAL_HOURS: 12
       NODE_TLS_REJECT_UNAUTHORIZED: 0
     volumes:
@@ -85,60 +88,103 @@ BackVault will automatically:
 | `BW_SERVER`                    | Bitwarden or Vaultwarden server URL            | ✅        | `https://vault.example.com` |
 | `BW_FILE_PASSWORD`             | Password to encrypt exported backup file       | ✅        | `strong_backup_password`    |
 | `BACKUP_INTERVAL_HOURS`        | Alternative to cron expression (integer hours) | ❌        | `12`                        |
+| `BACKUP_ENCRYPTION_MODE`       | `bitwarden` (default) or `raw` for portable AES-256-GCM encryption. | ❌ | `raw` |
 | `CRON_EXPRESSION`              | Cron string to schedule backups                | ❌        | `0 */12 * * *`              |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Set to `0` for self-signed certs               | ❌        | `0`                         |
 
 ---
 
-## 🔐 Restore & Decrypting Backups
+## 🔐 Decrypting Backups
 
-Bitwarden encrypted exports use the **same key derivation and encryption** methods as Bitwarden itself — not generic AES or OpenSSL.
-This means you **must use the Bitwarden CLI** to decrypt or restore the backups.
+BackVault supports two encryption modes, set by the `BACKUP_ENCRYPTION_MODE` environment variable. The decryption method depends on which mode was used to create the backup.
 
-### 🪄 How to restore a backup
+### Mode 1: `bitwarden` (Default)
 
-1. Install the official **Bitwarden CLI**:
-   [https://bitwarden.com/help/cli/](https://bitwarden.com/help/cli/)
+This mode uses Bitwarden's native encrypted JSON format. It's secure but proprietary, meaning you **must use the Bitwarden CLI** to decrypt it.
 
-2. Run the following command to import (decrypt) your backup:
+**How to Decrypt:**
 
-   ```bash
-   bw import --format encrypted_json --password <BACKUP_PASSWORD> --file /path/to/backup.json
-   ```
+1.  Install the official **Bitwarden CLI**: bitwarden.com/help/cli/
+2.  Config the CLI to point to your server with `bw config server`.
+3.  Log in using `bw login`.
+4.  Run the `import` command. This will decrypt the file and import it into your vault.
 
-   Replace `<BACKUP_PASSWORD>` with the same value used for `BW_FILE_PASSWORD` when the backup was created.
+    ```bash
+    # This command decrypts the file and imports it into a vault.
+    bw import bitwardenjson /path/to/backup.enc
+    ```
 
-3. You can import into:
+    You will be prompted to enter your encryption password before the import can complete.
 
-   * The **same** account you exported from, or
-   * A **different** Bitwarden account (the encryption is self-contained).
+> This method can be used to restore your vault into the same or a different Bitwarden account. The encryption is self-contained.
 
-4. The vault contents will be decrypted and restored automatically.
+### Mode 2: `raw` (Recommended for Portability)
 
----
+This mode exports the vault as raw JSON and then encrypts it in-memory using a standard, portable format: **AES-256-GCM** with a key derived using **PBKDF2-SHA256**.
 
-### 🔍 Why `openssl` or manual decryption doesn’t work
+The main advantage is that you **do not need the Bitwarden CLI** to decrypt your data, making it ideal for disaster recovery. You can use standard tools like Python or OpenSSL.
 
-When you export with:
+**File Structure:**
+The resulting `.enc` file contains: `[16-byte salt][12-byte nonce][encrypted data + 16-byte auth tag]`
 
-```bash
-bw export --format encrypted_json --password <PASSWORD>
+**How to Decrypt (Python Script):**
+
+Here is a simple Python script to decrypt the file. You only need the `cryptography` library.
+
+1.  Save the code below as `decrypt.py`.
+2.  Install the dependency: `pip install cryptography`.
+3.  Run the script: `python decrypt.py /path/to/backup.enc "YOUR_FILE_PASSWORD"`
+
+```python
+# decrypt.py
+import os
+import sys
+from getpass import getpass
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.exceptions import InvalidTag
+
+SALT_SIZE = 16
+KEY_SIZE = 32
+PBKDF2_ITERATIONS = 320000
+
+def decrypt_data(encrypted_data: bytes, password: str) -> bytes:
+    salt = encrypted_data[:SALT_SIZE]
+    nonce = encrypted_data[SALT_SIZE:SALT_SIZE+12]
+    ciphertext_with_tag = encrypted_data[SALT_SIZE+12:]
+
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=KEY_SIZE, salt=salt, iterations=PBKDF2_ITERATIONS)
+    key = kdf.derive(password.encode("utf-8"))
+
+    aesgcm = AESGCM(key)
+    return aesgcm.decrypt(nonce, ciphertext_with_tag, None)
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print(f"Usage: python {sys.argv[0]} <encrypted_file> [password]")
+        sys.exit(1)
+
+    file_path = sys.argv[1]
+    password = sys.argv[2] if len(sys.argv) > 2 else getpass("Enter backup password: ")
+
+    try:
+        with open(file_path, "rb") as f:
+            encrypted_contents = f.read()
+        
+        decrypted_json = decrypt_data(encrypted_contents, password)
+        print(decrypted_json.decode("utf-8"))
+        print("\nDecryption successful.", file=sys.stderr)
+    except InvalidTag:
+        print("Decryption failed: Invalid password or corrupted file.", file=sys.stderr)
+    except Exception as e:
+        print(f"An error occurred: {e}", file=sys.stderr)
 ```
-
-Bitwarden:
-
-1. Salts and stretches your password using your account’s KDF settings (PBKDF2 or Argon2).
-2. Derives a new key via HKDF.
-3. Encrypts your vault data with AES-CBC and adds a Message Authentication Code (MAC).
-
-The resulting file is a **Bitwarden-encrypted export**, not a generic AES file.
-Only the Bitwarden CLI can correctly handle this format.
 
 ---
 
 ## 🧠 Tips
 
-* Use a dedicated Bitwarden service account for backups.
 * Store `BW_FILE_PASSWORD` securely — it’s required for restoring backups.
 * You can run this container alongside Vaultwarden on the same host or a separate machine.
 * Combine with tools like `restic` or `rclone` to push backups to cloud storage.
@@ -151,6 +197,11 @@ To update to the latest version:
 
 ```bash
 docker pull ghcr.io/mvfc/backvault:latest
+```
+
+If using docker compose:
+```bash
+docker compose pull
 docker compose up -d
 ```
 
@@ -159,14 +210,14 @@ docker compose up -d
 ## 🪪 License
 
 This project is licensed under the **AGPL-3.0 License**.
-See [LICENSE](./LICENSE) for details.
+See LICENSE for details.
 
 ---
 
 ## 🤝 Contributing
 
 Pull requests and issue reports are welcome!
-Feel free to open a PR or discussion on [GitHub](https://github.com/mvfc/backvault).
+Feel free to open a PR or discussion on GitHub.
 
 ---
 
