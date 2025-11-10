@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives import hashes
 # Constants for encryption
 SALT_SIZE = 16
 KEY_SIZE = 32  # For AES-256
-PBKDF2_ITERATIONS = 320000
+PBKDF2_ITERATIONS = 600000
 
 logging.basicConfig(
     level=logging.INFO,
