@@ -13,6 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     unzip \
     sqlcipher \
+    age \
+    libssl-dev \
+    libsqlite3-dev \
+    libsqlcipher-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -36,12 +41,14 @@ RUN curl -fsSLO "$SUPERCRONIC_URL" \
 RUN apt-get remove curl unzip -y
 
 # Prepare working directories
-RUN mkdir -p /app/logs /app/backups && \
+RUN mkdir -p /app/logs /app/backups /app/db && \
     chmod -R 700 /app && \
     chown -R 1000:1000 /app
 
 # Copy project files
 WORKDIR /app
+
+COPY --chown=1000:1000 ./requirements.txt /app/requirements.txt
 COPY --chown=1000:1000 ./src /app
 COPY --chown=1000:1000 ./entrypoint.sh /app/entrypoint.sh
 COPY --chown=1000:1000 ./cleanup.sh /app/cleanup.sh
@@ -50,7 +57,7 @@ RUN chmod +x /app/entrypoint.sh /app/cleanup.sh
 
 # Install Python dependencies
 RUN pip install --upgrade pip && \
-    pip install --no-input --no-cache-dir cryptography
+    pip install --no-input --no-cache-dir -r requirements.txt
 
 USER 1000:1000
 

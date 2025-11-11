@@ -6,3 +6,4 @@ backup/
 logs/
 decrypt.py
 sqlcipher/
+db/

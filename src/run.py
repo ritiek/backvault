@@ -7,7 +7,7 @@ import sqlcipher3
 import hashlib
 import base64
 import uuid
-from db import init_db, db_connect
+from db import db_connect, get_key
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,47 +22,21 @@ def require_env(name: str) -> str:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return val
 
-def init_db(db_path: str, PRAGMA_KEY: str):
-    conn = sqlcipher3.connect(db_path)
-    cursor = conn.cursor()
-
-    cursor.execute(f"PRAGMA {PRAGMA_KEY}")
-    conn.commit()
-
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS keys (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            master_password TEXT NOT NULL,
-            client_id TEXT NOT NULL,
-            client_secret TEXT NOT NULL,
-            file_password TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
-
 def main():
-    t_sha = hashlib.sha512()
-    t_sha.update(base64.urlsafe_b64encode(uuid.uuid4().bytes) + base64.urlsafe_b64encode(uuid.uuid4().bytes))
-    hashed_pragma = base64.urlsafe_b64encode(t_sha.digest())
-    PRAGMA_KEY = f"key='{hashed_pragma.__str__()}';"
-    init_db("backup/backvault.db", PRAGMA_KEY)
-
-    db_conn = sqlcipher3.connect("backup/backvault.db")
-    db_cursor = db_conn.cursor()
-
-    db_cursor.execute("INSERT INTO keys VALUES (2, 'master_pw_example', 'client_id_example', 'client_secret_example', 'file_pw_example')")
-    db_conn.commit()
+    # Database setup
+    DB_PATH = os.getenv("DB_PATH", "/app/db/backvault.db")
+    PRAGMA_KEY_FILE = os.getenv("PRAGMA_KEY_FILE", "/app/db/backvault.db.pragma")
+    db_conn, db_cursor = db_connect(DB_PATH, PRAGMA_KEY_FILE)
+    if not db_conn or not db_cursor:
+        return
     
     # Vault access information
-    client_id = db_cursor.execute("SELECT client_id FROM keys").fetchone()[0]
-    client_secret = db_cursor.execute("SELECT client_secret FROM keys").fetchone()[0]
-    master_pw = db_cursor.execute("SELECT master_password FROM keys").fetchone()[0]
-    file_pw = db_cursor.execute("SELECT file_password FROM keys").fetchone()[0]
+    client_id = get_key(db_conn, 'client_id')
+    client_secret = get_key(db_conn, 'client_secret')
+    master_pw = get_key(db_conn, 'master_password')
+    file_pw = get_key(db_conn, 'file_password')
 
     server = require_env("BW_SERVER")
-
 
     # Configuration
     backup_dir = os.getenv("BACKUP_DIR", "/app/backups")

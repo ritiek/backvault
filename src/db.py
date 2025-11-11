@@ -27,7 +27,7 @@ def init_db(db_path: str, PRAGMA_KEY_FILE: str) -> None:
         PRAGMA_KEY = f"key='{hashed_pragma.__str__()[2:-1]}';"
         logging.debug(f"New Pragma key generated.")
         try:
-            with open("backup/backvault.db.pragma", "w") as f:
+            with open(PRAGMA_KEY_FILE, "w") as f:
                 f.write(PRAGMA_KEY)
             logging.debug("Pragma saved to file.")
         except Exception as e:
@@ -50,11 +50,8 @@ def init_db(db_path: str, PRAGMA_KEY_FILE: str) -> None:
     try:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS keys (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                master_password TEXT NOT NULL,
-                client_id TEXT NOT NULL,
-                client_secret TEXT NOT NULL,
-                file_password TEXT NOT NULL
+                name TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             )
         """)
         logging.info("Table created.")
@@ -85,3 +82,13 @@ def db_connect(db_path: str, PRAGMA_KEY_FILE: str) -> tuple[sqlcipher3.Connectio
     cursor.execute(f"PRAGMA {PRAGMA_KEY}")
     conn.commit()
     return conn, cursor
+
+def put_key(conn: sqlcipher3.Connection, name, value) -> None:
+    conn.execute("INSERT OR REPLACE INTO keys (name, value) VALUES (?, ?)", (name, value))
+    conn.commit()
+
+def get_key(conn: sqlcipher3.Connection, name: str) -> str:
+    value = conn.execute("SELECT value FROM keys WHERE name = ?", (name,)).fetchone()[0]
+    if isinstance(value, bytes):
+        value = value.decode("utf-8")
+    return value
