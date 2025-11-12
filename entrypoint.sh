@@ -14,7 +14,7 @@ cat > /app/run_wrapper.sh <<EOF
 set -euo pipefail
 export PATH="/usr/local/bin:\$PATH"
 $(printenv | grep -E 'BW_|BACKUP_' | sed 's/^/export /')
-/usr/local/bin/python /app/run.py 2>&1 | tee -a /app/logs/cron.log
+/usr/local/bin/python /app/src/run.py 2>&1 | tee -a /app/logs/cron.log
 EOF
 
 chmod +x /app/run_wrapper.sh
@@ -29,9 +29,9 @@ EOF
 
 if [ ! -f "${DB_FILE}" ]; then
   echo "Secure DB not found; starting one-time setup UI at http://${UI_HOST}:${UI_PORT}"
+  cd /app/src
   uvicorn init:app --host "${UI_HOST}" --port "${UI_PORT}" &
   UI_PID=$!
-
   # Wait for the DB to be created before continuing
   while [ ! -f "${DB_FILE}" ]; do
     sleep 3
@@ -40,11 +40,12 @@ if [ ! -f "${DB_FILE}" ]; then
   echo "Setup complete detected, stopping UI..."
   kill ${UI_PID} || true
   sleep 1
+  cd /app
 fi
 
 echo "Running initial backup..."
 
-/usr/local/bin/python /app/run.py 2>&1 | tee -a /app/logs/cron.log
+./run_wrapper.sh
 
 echo "Starting supercronic scheduler..."
 exec /usr/local/bin/supercronic /app/crontab

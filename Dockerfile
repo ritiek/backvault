@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm
+FROM python:3.13-slim-bookworm
 
 # Pin version and digest for Bitwarden CLI
 ARG BW_VERSION="2025.10.0"
@@ -37,10 +37,8 @@ RUN curl -fsSLO "$SUPERCRONIC_URL" \
  && mv "$SUPERCRONIC" "/usr/local/bin/${SUPERCRONIC}" \
  && ln -s "/usr/local/bin/${SUPERCRONIC}" /usr/local/bin/supercronic
 
-RUN apt-get remove curl unzip -y
-
 # Prepare working directories
-RUN mkdir -p /app/logs /app/backups /app/db && \
+RUN mkdir -p /app/logs /app/backups /app/db /app/src && \
     chmod -R 700 /app && \
     chown -R 1000:1000 /app
 
@@ -48,7 +46,7 @@ RUN mkdir -p /app/logs /app/backups /app/db && \
 WORKDIR /app
 
 COPY --chown=1000:1000 ./requirements.txt /app/requirements.txt
-COPY --chown=1000:1000 ./src /app
+COPY --chown=1000:1000 ./src /app/src
 COPY --chown=1000:1000 ./entrypoint.sh /app/entrypoint.sh
 COPY --chown=1000:1000 ./cleanup.sh /app/cleanup.sh
 
@@ -57,6 +55,10 @@ RUN chmod +x /app/entrypoint.sh /app/cleanup.sh
 # Install Python dependencies
 RUN pip install --upgrade pip && \
     pip install --no-input --no-cache-dir -r requirements.txt
+
+RUN apt-get remove curl unzip binutils -y
+
+ENV PYTHONPATH=/app
 
 USER 1000:1000
 

@@ -1,5 +1,4 @@
 cryptography
-sqlcipher3-binary
 sqlcipher3
 fastapi
 uvicorn
